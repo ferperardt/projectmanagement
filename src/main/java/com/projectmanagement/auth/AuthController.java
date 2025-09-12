@@ -1,5 +1,7 @@
 package com.projectmanagement.auth;
 
+import com.projectmanagement.auth.dto.LoginRequest;
+import com.projectmanagement.auth.dto.LoginResponse;
 import com.projectmanagement.auth.dto.RegisterUserRequest;
 import com.projectmanagement.user.User;
 import jakarta.validation.Valid;
@@ -24,5 +26,11 @@ public class AuthController {
         User createdUser = authService.registerUser(registerUserRequest);
         URI location = URI.create("/api/users/" + createdUser.getId());
         return ResponseEntity.created(location).build();
+    }
+    
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
+        LoginResponse loginResponse = authService.login(loginRequest);
+        return ResponseEntity.ok(loginResponse);
     }
 }
