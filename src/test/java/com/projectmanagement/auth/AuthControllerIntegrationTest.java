@@ -9,6 +9,7 @@ import com.projectmanagement.user.UserRepository;
 import com.projectmanagement.user.enums.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -170,7 +171,35 @@ public class AuthControllerIntegrationTest {
 
         // Then the registration should be FORBIDDEN
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        
+
+        // And the user should NOT exist in the database
+        User createdUser = userRepository.findByEmail(newEmail).orElse(null);
+        assertThat(createdUser).isNull();
+    }
+
+    @Test
+    @DisplayName("Given unauthenticated user, when registering a new DEVELOPER, then the registration should be UNAUTHORIZED")
+    void givenUnauthenticatedUser_whenRegisteringNewDeveloper_thenRegistrationShouldBeUnauthorized() {
+        // Given an unauthenticated user (no auth token)
+        String newEmail = "newdev4@prjctmng.com";
+        RegisterUserRequest newDeveloper = createDeveloperRequest("newdev4", newEmail);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        // No Authorization header set - unauthenticated request
+        HttpEntity<RegisterUserRequest> entity = new HttpEntity<>(newDeveloper, headers);
+
+        // When registering a new DEVELOPER without authentication
+        ResponseEntity<Void> response = restTemplate.exchange(
+                baseUrl + "/register",
+                HttpMethod.POST,
+                entity,
+                Void.class
+        );
+
+        // Then the registration should be UNAUTHORIZED
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
         // And the user should NOT exist in the database
         User createdUser = userRepository.findByEmail(newEmail).orElse(null);
         assertThat(createdUser).isNull();
