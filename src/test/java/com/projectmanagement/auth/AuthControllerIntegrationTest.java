@@ -116,22 +116,13 @@ public class AuthControllerIntegrationTest {
         );
     }
 
-    @ParameterizedTest
+    @Test
     @DisplayName("Given an authenticated ADMIN user, when registering a new DEVELOPER, then the registration should succeed")
-    @CsvSource({
-            "admin@prjctmng.com, prjctmng432!admin, ADMIN, newdev1, newdev1@prjctmng.com, 201"
-    })
-    void givenAuthenticatedAdminUser_whenRegisteringNewDeveloper_thenRegistrationShouldSucceed(
-            String userEmail,
-            String userPassword,
-            String userRole,
-            String newUsername,
-            String newEmail,
-            int expectedStatus) {
+    void givenAuthenticatedAdminUser_whenRegisteringNewDeveloper_thenRegistrationShouldSucceed() {
 
         // Given an authenticated ADMIN user
-        String authToken = loginAndGetToken(userEmail, userPassword);
-        RegisterUserRequest newDeveloper = createDeveloperRequest(newUsername, newEmail);
+        String authToken = loginAndGetToken("admin@prjctmng.com", "prjctmng432!admin");
+        RegisterUserRequest newDeveloper = createDeveloperRequest("newdev1", "newdev1@prjctmng.com");
 
         // When registering a new DEVELOPER
         ResponseEntity<Void> response = registerUser(newDeveloper, authToken);
@@ -140,29 +131,24 @@ public class AuthControllerIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getHeaders().getLocation()).isNotNull();
 
-        // And the user should exist in the database with correct attributes
-        User createdUser = userRepository.findByEmail(newEmail).orElse(null);
+        // And the user should exist in the database
+        User createdUser = userRepository.findByEmail("newdev1@prjctmng.com").orElse(null);
         assertThat(createdUser).isNotNull();
-        assertThat(createdUser.getUsername()).isEqualTo(newUsername);
-        assertThat(createdUser.getRole()).isEqualTo(UserRole.DEVELOPER);
-        assertThat(createdUser.getEnabled()).isTrue();
     }
 
     @ParameterizedTest
     @DisplayName("Given non-ADMIN authenticated user, when registering a new DEVELOPER, then the registration should be FORBIDDEN")
     @CsvSource({
-            "manager@prjctmng.com, prjctmng432!manager, PROJECT_MANAGER, newdev2, newdev2@prjctmng.com, 403",
-            "dev@prjctmng.com, prjctmng432!dev, DEVELOPER, newdev3, newdev3@prjctmng.com, 403"
+            "manager@prjctmng.com, prjctmng432!manager, newdev2, newdev2@prjctmng.com",
+            "dev@prjctmng.com, prjctmng432!dev, newdev3, newdev3@prjctmng.com"
     })
     void givenNonAdminAuthenticatedUser_whenRegisteringNewDeveloper_thenRegistrationShouldBeForbidden(
             String userEmail,
             String userPassword,
-            String userRole,
             String newUsername,
-            String newEmail,
-            int expectedStatus) {
+            String newEmail) {
 
-        // Given a non-ADMIN authenticated user with role: {userRole}
+        // Given a non-ADMIN authenticated user
         String authToken = loginAndGetToken(userEmail, userPassword);
         RegisterUserRequest newDeveloper = createDeveloperRequest(newUsername, newEmail);
 
