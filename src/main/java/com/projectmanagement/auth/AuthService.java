@@ -28,12 +28,12 @@ public class AuthService {
     public LoginResponse login(LoginRequest request) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
-                        request.getPassword()
+                        request.email(),
+                        request.password()
                 )
         );
         
-        User user = userService.findByEmail(request.getEmail());
+        User user = userService.findByEmail(request.email());
         String jwt = jwtService.generateToken(user);
         
         LoginResponse.UserInfo userInfo = new LoginResponse.UserInfo(
