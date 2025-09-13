@@ -7,6 +7,7 @@ import com.projectmanagement.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,6 +23,7 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> register(@Valid @RequestBody RegisterUserRequest registerUserRequest) {
         User createdUser = authService.registerUser(registerUserRequest);
         URI location = URI.create("/api/users/" + createdUser.getId());
