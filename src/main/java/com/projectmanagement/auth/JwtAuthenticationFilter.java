@@ -25,6 +25,10 @@ import java.util.List;
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final String LOGIN_ENDPOINT = "/api/auth/login";
+    private static final String BEARER_PREFIX = "Bearer ";
+    private static final int BEARER_TOKEN_BEGIN_INDEX = 7;
+
     private final JwtService jwtService;
     private final UserService userService;
 
@@ -35,47 +39,59 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-        if (request.getServletPath().equals("/api/auth/login")) {
+        if (shouldSkipAuthentication(request.getServletPath())) {
             filterChain.doFilter(request, response);
             return;
         }
 
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
-
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        final String jwt = extractTokenFromHeader(authHeader);
+        
+        if (jwt == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7);
-        
         try {
-            userEmail = jwtService.extractEmail(jwt);
-
-            if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = this.userService.loadUserByUsername(userEmail);
-
-                if (jwtService.isTokenValid(jwt, userDetails.getUsername())) {
-                    String role = jwtService.extractRole(jwt);
-                    List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
-
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            authorities
-                    );
-                    authToken.setDetails(
-                            new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                }
-            }
+            authenticateUser(jwt, request);
         } catch (Exception e) {
             log.error("Cannot set user authentication: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean shouldSkipAuthentication(String servletPath) {
+        return LOGIN_ENDPOINT.equals(servletPath);
+    }
+
+    private String extractTokenFromHeader(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+            return null;
+        }
+        return authHeader.substring(BEARER_TOKEN_BEGIN_INDEX);
+    }
+
+    private void authenticateUser(String jwt, HttpServletRequest request) {
+        final String userEmail = jwtService.extractEmail(jwt);
+
+        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = this.userService.loadUserByUsername(userEmail);
+
+            if (jwtService.isTokenValid(jwt, userDetails.getUsername())) {
+                String role = jwtService.extractRole(jwt);
+                List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
+
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        null,
+                        authorities
+                );
+                authToken.setDetails(
+                        new WebAuthenticationDetailsSource().buildDetails(request)
+                );
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        }
     }
 }

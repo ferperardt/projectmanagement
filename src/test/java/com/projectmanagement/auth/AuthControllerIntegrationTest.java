@@ -103,6 +103,18 @@ public class AuthControllerIntegrationTest {
         );
     }
 
+    private RegisterUserRequest createDeveloperRequest(String username, String email) {
+        return new RegisterUserRequest(
+                username,
+                email,
+                "password123",
+                UserRole.DEVELOPER,
+                true,
+                false,
+                null
+        );
+    }
+
     @ParameterizedTest
     @DisplayName("Given an authenticated ADMIN user, when registering a new DEVELOPER, then the registration should succeed")
     @CsvSource({
@@ -118,15 +130,7 @@ public class AuthControllerIntegrationTest {
 
         // Given an authenticated ADMIN user
         String authToken = loginAndGetToken(userEmail, userPassword);
-        RegisterUserRequest newDeveloper = new RegisterUserRequest(
-                newUsername,
-                newEmail,
-                "password123",
-                UserRole.DEVELOPER,
-                true,
-                false,
-                null
-        );
+        RegisterUserRequest newDeveloper = createDeveloperRequest(newUsername, newEmail);
 
         // When registering a new DEVELOPER
         ResponseEntity<Void> response = registerUser(newDeveloper, authToken);
@@ -159,15 +163,7 @@ public class AuthControllerIntegrationTest {
 
         // Given a non-ADMIN authenticated user with role: {userRole}
         String authToken = loginAndGetToken(userEmail, userPassword);
-        RegisterUserRequest newDeveloper = new RegisterUserRequest(
-                newUsername,
-                newEmail,
-                "password123",
-                UserRole.DEVELOPER,
-                true,
-                false,
-                null
-        );
+        RegisterUserRequest newDeveloper = createDeveloperRequest(newUsername, newEmail);
 
         // When registering a new DEVELOPER
         ResponseEntity<Void> response = registerUser(newDeveloper, authToken);
