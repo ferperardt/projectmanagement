@@ -4,6 +4,7 @@ import com.projectmanagement.auth.dto.LoginRequest;
 import com.projectmanagement.auth.dto.LoginResponse;
 import com.projectmanagement.auth.dto.RegisterUserRequest;
 import com.projectmanagement.user.User;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -34,5 +35,15 @@ public class AuthController {
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
         LoginResponse loginResponse = authService.login(loginRequest);
         return ResponseEntity.ok(loginResponse);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            authService.logout(token);
+        }
+        return ResponseEntity.ok().build();
     }
 }
