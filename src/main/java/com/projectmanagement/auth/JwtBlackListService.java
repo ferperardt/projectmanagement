@@ -2,12 +2,11 @@ package com.projectmanagement.auth;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -15,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JwtBlackListService {
 
     private final JwtBlackListProperties properties;
-    private final ConcurrentHashMap<String, Long> blacklistedTokens = new ConcurrentHashMap<>();
+    private final RedisTemplate<String, String> redisTemplate;
 
     public void blacklistToken(String jti, long expirationTime) {
         if (jti == null || jti.trim().isEmpty()) {
@@ -23,11 +22,14 @@ public class JwtBlackListService {
             return;
         }
 
-        blacklistedTokens.put(jti, expirationTime);
-        log.debug("Token blacklisted: JTI={}, expiration={}", jti, expirationTime);
+        String key = buildKey(jti);
+        long ttlSeconds = calculateTtl(expirationTime);
 
-        if (properties.isEnableLazyCleanup()) {
-            performLazyCleanup();
+        if (ttlSeconds > 0) {
+            redisTemplate.opsForValue().set(key, "blacklisted", Duration.ofSeconds(ttlSeconds));
+            log.debug("Token blacklisted in Redis: JTI={}, TTL={}s", jti, ttlSeconds);
+        } else {
+            log.warn("Token already expired, not adding to blacklist: JTI={}", jti);
         }
     }
 
@@ -36,58 +38,39 @@ public class JwtBlackListService {
             return false;
         }
 
-        if (properties.isEnableLazyCleanup()) {
-            performLazyCleanup();
-        }
+        String key = buildKey(jti);
+        Boolean exists = redisTemplate.hasKey(key);
+        boolean isBlacklisted = Boolean.TRUE.equals(exists);
 
-        boolean isBlacklisted = blacklistedTokens.containsKey(jti);
         log.debug("Blacklist check: JTI={}, isBlacklisted={}", jti, isBlacklisted);
-
         return isBlacklisted;
     }
 
-    @Scheduled(fixedRateString = "#{@jwtBlackListProperties.cleanupIntervalMillis}")
-    public void performScheduledCleanup() {
-        if (!properties.isEnableScheduledCleanup()) {
-            return;
-        }
-
-        int removedCount = performCleanup();
-        log.info("Scheduled blacklist cleanup completed. Removed {} expired tokens. Active tokens: {}",
-                removedCount, blacklistedTokens.size());
-    }
-
-    private void performLazyCleanup() {
-        int removedCount = performCleanup();
-        if (removedCount > 0) {
-            log.debug("Lazy cleanup removed {} expired tokens. Active tokens: {}",
-                    removedCount, blacklistedTokens.size());
-        }
-    }
-
-    private int performCleanup() {
-        long currentTime = System.currentTimeMillis();
-        int removedCount = 0;
-
-        Iterator<Map.Entry<String, Long>> iterator = blacklistedTokens.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, Long> entry = iterator.next();
-            if (entry.getValue() < currentTime) {
-                iterator.remove();
-                removedCount++;
-            }
-        }
-
-        return removedCount;
-    }
-
     public int getBlacklistedTokensCount() {
-        return blacklistedTokens.size();
+        String pattern = properties.getKeyPrefix() + ":*";
+        Set<String> keys = redisTemplate.keys(pattern);
+        return keys != null ? keys.size() : 0;
     }
 
     public void clearAll() {
-        int clearedCount = blacklistedTokens.size();
-        blacklistedTokens.clear();
-        log.info("Cleared all blacklisted tokens. Removed {} tokens", clearedCount);
+        String pattern = properties.getKeyPrefix() + ":*";
+        Set<String> keys = redisTemplate.keys(pattern);
+
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+            log.info("Cleared all blacklisted tokens from Redis. Removed {} tokens", keys.size());
+        } else {
+            log.info("No blacklisted tokens found to clear");
+        }
+    }
+
+    private String buildKey(String jti) {
+        return properties.getKeyPrefix() + ":" + jti;
+    }
+
+    private long calculateTtl(long expirationTime) {
+        long currentTime = System.currentTimeMillis();
+        long ttlMillis = expirationTime - currentTime + (properties.getTtlBufferSeconds() * 1000L);
+        return Math.max(0, ttlMillis / 1000);
     }
 }

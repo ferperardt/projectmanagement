@@ -1,5 +1,6 @@
 package com.projectmanagement.auth;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -11,16 +12,33 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+
+import java.time.Duration;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import java.util.Collection;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("JWT BlackList Service")
 class JwtBlackListServiceTest {
 
     @Mock
     private JwtBlackListProperties properties;
+
+    @Mock
+    private RedisTemplate<String, String> redisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOperations;
 
     @InjectMocks
     private JwtBlackListService jwtBlackListService;
@@ -40,6 +58,16 @@ class JwtBlackListServiceTest {
         return getCurrentTime() - 3600000; // 1 hour ago
     }
 
+    @BeforeEach
+    void setUp() {
+        // Setup default property values
+        when(properties.getKeyPrefix()).thenReturn("jwt:blacklist");
+        when(properties.getTtlBufferSeconds()).thenReturn(300);
+
+        // Setup Redis template mock
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    }
+
     @Nested
     @DisplayName("Token Blacklisting Operations")
     class TokenBlacklistingOperations {
@@ -47,12 +75,15 @@ class JwtBlackListServiceTest {
         @Test
         @DisplayName("Should successfully blacklist token with valid JTI")
         void given_validJtiAndExpiration_when_blacklistToken_then_tokenIsBlacklisted() {
-            // Given & When
-            jwtBlackListService.blacklistToken(VALID_JTI, getFutureExpiration());
+            // Given
+            long futureExpiration = getFutureExpiration();
+            String expectedKey = "jwt:blacklist:" + VALID_JTI;
+
+            // When
+            jwtBlackListService.blacklistToken(VALID_JTI, futureExpiration);
 
             // Then
-            assertThat(jwtBlackListService.isBlacklisted(VALID_JTI)).isTrue();
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(1);
+            verify(valueOperations).set(eq(expectedKey), eq("blacklisted"), any(Duration.class));
         }
 
         @ParameterizedTest
@@ -64,37 +95,36 @@ class JwtBlackListServiceTest {
             jwtBlackListService.blacklistToken(invalidJti, getFutureExpiration());
 
             // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isZero();
+            verify(valueOperations, never()).set(anyString(), anyString(), any(Duration.class));
         }
 
         @Test
-        @DisplayName("Should trigger lazy cleanup when enabled after blacklisting")
-        void given_lazyCleanupEnabled_when_blacklistToken_then_shouldTriggerCleanup() {
+        @DisplayName("Should not blacklist already expired token")
+        void given_expiredToken_when_blacklistToken_then_shouldNotStore() {
             // Given
-            when(properties.isEnableLazyCleanup()).thenReturn(true);
-            jwtBlackListService.blacklistToken("expired-token", getPastExpiration());
+            long pastExpiration = getPastExpiration();
 
             // When
-            jwtBlackListService.blacklistToken(VALID_JTI, getFutureExpiration());
+            jwtBlackListService.blacklistToken(VALID_JTI, pastExpiration);
 
             // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(1);
-            assertThat(jwtBlackListService.isBlacklisted(VALID_JTI)).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted("expired-token")).isFalse();
+            verify(valueOperations, never()).set(anyString(), anyString(), any(Duration.class));
         }
 
         @Test
-        @DisplayName("Should not trigger lazy cleanup when disabled")
-        void given_lazyCleanupDisabled_when_blacklistToken_then_shouldNotTriggerCleanup() {
+        @DisplayName("Should calculate correct TTL with buffer")
+        void given_validToken_when_blacklistToken_then_shouldSetCorrectTTL() {
             // Given
-            when(properties.isEnableLazyCleanup()).thenReturn(false);
-            jwtBlackListService.blacklistToken("expired-token", getPastExpiration());
+            long futureExpiration = getCurrentTime() + 1000000; // ~16 minutes
+            String expectedKey = "jwt:blacklist:" + VALID_JTI;
 
             // When
-            jwtBlackListService.blacklistToken(VALID_JTI, getFutureExpiration());
+            jwtBlackListService.blacklistToken(VALID_JTI, futureExpiration);
 
             // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(2);
+            verify(valueOperations).set(eq(expectedKey), eq("blacklisted"), argThat(duration ->
+                duration.toSeconds() >= 1000 && duration.toSeconds() <= 2000 // ~16 min + 5 min buffer
+            ));
         }
     }
 
@@ -106,20 +136,30 @@ class JwtBlackListServiceTest {
         @DisplayName("Should return true for blacklisted token")
         void given_blacklistedToken_when_isBlacklisted_then_shouldReturnTrue() {
             // Given
-            jwtBlackListService.blacklistToken(VALID_JTI, getFutureExpiration());
+            String expectedKey = "jwt:blacklist:" + VALID_JTI;
+            when(redisTemplate.hasKey(expectedKey)).thenReturn(true);
 
-            // When & Then
-            assertThat(jwtBlackListService.isBlacklisted(VALID_JTI)).isTrue();
+            // When
+            boolean result = jwtBlackListService.isBlacklisted(VALID_JTI);
+
+            // Then
+            assertThat(result).isTrue();
+            verify(redisTemplate).hasKey(expectedKey);
         }
 
         @Test
         @DisplayName("Should return false for non-blacklisted token")
         void given_nonBlacklistedToken_when_isBlacklisted_then_shouldReturnFalse() {
             // Given
-            jwtBlackListService.blacklistToken(VALID_JTI, getFutureExpiration());
+            String expectedKey = "jwt:blacklist:" + ANOTHER_JTI;
+            when(redisTemplate.hasKey(expectedKey)).thenReturn(false);
 
-            // When & Then
-            assertThat(jwtBlackListService.isBlacklisted(ANOTHER_JTI)).isFalse();
+            // When
+            boolean result = jwtBlackListService.isBlacklisted(ANOTHER_JTI);
+
+            // Then
+            assertThat(result).isFalse();
+            verify(redisTemplate).hasKey(expectedKey);
         }
 
         @ParameterizedTest
@@ -127,164 +167,15 @@ class JwtBlackListServiceTest {
         @NullAndEmptySource
         @ValueSource(strings = {" ", "  "})
         void given_nullOrEmptyJti_when_isBlacklisted_then_shouldReturnFalse(String invalidJti) {
-            // When & Then
-            assertThat(jwtBlackListService.isBlacklisted(invalidJti)).isFalse();
-        }
-
-        @Test
-        @DisplayName("Should trigger lazy cleanup when enabled during verification")
-        void given_lazyCleanupEnabled_when_isBlacklisted_then_shouldTriggerCleanup() {
-            // Given
-            when(properties.isEnableLazyCleanup()).thenReturn(true);
-            jwtBlackListService.blacklistToken("expired-token", getPastExpiration());
-            jwtBlackListService.blacklistToken(VALID_JTI, getFutureExpiration());
-
             // When
-            boolean result = jwtBlackListService.isBlacklisted(VALID_JTI);
+            boolean result = jwtBlackListService.isBlacklisted(invalidJti);
 
             // Then
-            assertThat(result).isTrue();
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(1); // expired token removed
-        }
-
-        @Test
-        @DisplayName("Should not trigger lazy cleanup when disabled")
-        void given_lazyCleanupDisabled_when_isBlacklisted_then_shouldNotTriggerCleanup() {
-            // Given
-            when(properties.isEnableLazyCleanup()).thenReturn(false);
-            jwtBlackListService.blacklistToken("expired-token", getPastExpiration());
-            jwtBlackListService.blacklistToken(VALID_JTI, getFutureExpiration());
-
-            // When
-            boolean result = jwtBlackListService.isBlacklisted(VALID_JTI);
-
-            // Then
-            assertThat(result).isTrue();
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(2); // expired token not removed
+            assertThat(result).isFalse();
+            verify(redisTemplate, never()).hasKey(anyString());
         }
     }
 
-    @Nested
-    @DisplayName("Cleanup Operations")
-    class CleanupOperations {
-
-        @Test
-        @DisplayName("Should remove only expired tokens during cleanup")
-        void given_mixedTokens_when_performCleanup_then_shouldRemoveOnlyExpiredTokens() {
-            // Given
-            when(properties.isEnableLazyCleanup()).thenReturn(true);
-            jwtBlackListService.blacklistToken("expired-1", getPastExpiration());
-            jwtBlackListService.blacklistToken("expired-2", getCurrentTime() - 1000);
-            jwtBlackListService.blacklistToken("valid-1", getFutureExpiration());
-            jwtBlackListService.blacklistToken("valid-2", getCurrentTime() + 60000);
-
-            // When - Trigger cleanup via isBlacklisted (which calls lazy cleanup)
-            jwtBlackListService.isBlacklisted("any-token");
-
-            // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(2);
-            assertThat(jwtBlackListService.isBlacklisted("valid-1")).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted("valid-2")).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted("expired-1")).isFalse();
-            assertThat(jwtBlackListService.isBlacklisted("expired-2")).isFalse();
-        }
-
-        @Test
-        @DisplayName("Should keep all tokens when none are expired")
-        void given_allValidTokens_when_performCleanup_then_shouldKeepAllTokens() {
-            // Given
-            when(properties.isEnableLazyCleanup()).thenReturn(true);
-            jwtBlackListService.blacklistToken("valid-1", getFutureExpiration());
-            jwtBlackListService.blacklistToken("valid-2", getCurrentTime() + 60000);
-            jwtBlackListService.blacklistToken("valid-3", getCurrentTime() + 300000);
-
-            // When
-            jwtBlackListService.isBlacklisted("any-token");
-
-            // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(3);
-            assertThat(jwtBlackListService.isBlacklisted("valid-1")).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted("valid-2")).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted("valid-3")).isTrue();
-        }
-
-        @Test
-        @DisplayName("Should remove all tokens when all are expired")
-        void given_allExpiredTokens_when_performCleanup_then_shouldRemoveAllTokens() {
-            // Given
-            when(properties.isEnableLazyCleanup()).thenReturn(true);
-            jwtBlackListService.blacklistToken("expired-1", getPastExpiration());
-            jwtBlackListService.blacklistToken("expired-2", getCurrentTime() - 1000);
-            jwtBlackListService.blacklistToken("expired-3", getCurrentTime() - 300000);
-
-            // When
-            jwtBlackListService.isBlacklisted("any-token");
-
-            // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isZero();
-            assertThat(jwtBlackListService.isBlacklisted("expired-1")).isFalse();
-            assertThat(jwtBlackListService.isBlacklisted("expired-2")).isFalse();
-            assertThat(jwtBlackListService.isBlacklisted("expired-3")).isFalse();
-        }
-
-        @Test
-        @DisplayName("Should handle empty blacklist during cleanup")
-        void given_emptyBlacklist_when_performCleanup_then_shouldHandleGracefully() {
-            // Given - empty blacklist
-
-            // When & Then - should not throw exception
-            assertThat(jwtBlackListService.isBlacklisted("any-token")).isFalse();
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isZero();
-        }
-    }
-
-    @Nested
-    @DisplayName("Scheduled Tasks")
-    class ScheduledTasks {
-
-        @Test
-        @DisplayName("Should perform scheduled cleanup when enabled")
-        void given_scheduledCleanupEnabled_when_performScheduledCleanup_then_shouldCleanupTokens() {
-            // Given
-            when(properties.isEnableScheduledCleanup()).thenReturn(true);
-            jwtBlackListService.blacklistToken("expired-token", getPastExpiration());
-            jwtBlackListService.blacklistToken("valid-token", getFutureExpiration());
-
-            // When
-            jwtBlackListService.performScheduledCleanup();
-
-            // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(1);
-            assertThat(jwtBlackListService.isBlacklisted("valid-token")).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted("expired-token")).isFalse();
-        }
-
-        @Test
-        @DisplayName("Should skip scheduled cleanup when disabled")
-        void given_scheduledCleanupDisabled_when_performScheduledCleanup_then_shouldSkipCleanup() {
-            // Given
-            when(properties.isEnableScheduledCleanup()).thenReturn(false);
-            jwtBlackListService.blacklistToken("expired-token", getPastExpiration());
-            jwtBlackListService.blacklistToken("valid-token", getFutureExpiration());
-
-            // When
-            jwtBlackListService.performScheduledCleanup();
-
-            // Then - expired token should still be there
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(2);
-        }
-
-        @Test
-        @DisplayName("Should handle scheduled cleanup with empty blacklist")
-        void given_emptyBlacklist_when_performScheduledCleanup_then_shouldHandleGracefully() {
-            // Given
-            when(properties.isEnableScheduledCleanup()).thenReturn(true);
-
-            // When & Then - should not throw exception
-            jwtBlackListService.performScheduledCleanup();
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isZero();
-        }
-    }
 
     @Nested
     @DisplayName("Utility Methods")
@@ -294,66 +185,71 @@ class JwtBlackListServiceTest {
         @DisplayName("Should return correct blacklisted tokens count")
         void given_multipleTokens_when_getBlacklistedTokensCount_then_shouldReturnCorrectCount() {
             // Given
-            jwtBlackListService.blacklistToken("token-1", getFutureExpiration());
-            jwtBlackListService.blacklistToken("token-2", getFutureExpiration());
-            jwtBlackListService.blacklistToken("token-3", getFutureExpiration());
+            Set<String> mockKeys = Set.of("jwt:blacklist:token-1", "jwt:blacklist:token-2", "jwt:blacklist:token-3");
+            when(redisTemplate.keys("jwt:blacklist:*")).thenReturn(mockKeys);
 
-            // When & Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(3);
+            // When
+            int count = jwtBlackListService.getBlacklistedTokensCount();
+
+            // Then
+            assertThat(count).isEqualTo(3);
+            verify(redisTemplate).keys("jwt:blacklist:*");
         }
 
         @Test
         @DisplayName("Should return zero count for empty blacklist")
         void given_emptyBlacklist_when_getBlacklistedTokensCount_then_shouldReturnZero() {
-            // When & Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isZero();
+            // Given
+            when(redisTemplate.keys("jwt:blacklist:*")).thenReturn(Set.of());
+
+            // When
+            int count = jwtBlackListService.getBlacklistedTokensCount();
+
+            // Then
+            assertThat(count).isZero();
+            verify(redisTemplate).keys("jwt:blacklist:*");
         }
 
         @Test
         @DisplayName("Should clear all blacklisted tokens")
         void given_multipleTokens_when_clearAll_then_shouldRemoveAllTokens() {
             // Given
-            jwtBlackListService.blacklistToken("token-1", getFutureExpiration());
-            jwtBlackListService.blacklistToken("token-2", getFutureExpiration());
-            jwtBlackListService.blacklistToken("token-3", getFutureExpiration());
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(3);
+            Set<String> mockKeys = Set.of("jwt:blacklist:token-1", "jwt:blacklist:token-2", "jwt:blacklist:token-3");
+            when(redisTemplate.keys("jwt:blacklist:*")).thenReturn(mockKeys);
 
             // When
             jwtBlackListService.clearAll();
 
             // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isZero();
-            assertThat(jwtBlackListService.isBlacklisted("token-1")).isFalse();
-            assertThat(jwtBlackListService.isBlacklisted("token-2")).isFalse();
-            assertThat(jwtBlackListService.isBlacklisted("token-3")).isFalse();
+            verify(redisTemplate).keys("jwt:blacklist:*");
+            verify(redisTemplate).delete(mockKeys);
         }
 
         @Test
         @DisplayName("Should handle clear all on empty blacklist")
         void given_emptyBlacklist_when_clearAll_then_shouldHandleGracefully() {
-            // When & Then - should not throw exception
-            jwtBlackListService.clearAll();
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isZero();
-        }
+            // Given
+            when(redisTemplate.keys("jwt:blacklist:*")).thenReturn(Set.of());
 
-        @ParameterizedTest
-        @DisplayName("Should handle concurrent operations safely")
-        @CsvSource({
-                "token-1, token-2, token-3",
-                "jti-a, jti-b, jti-c",
-                "test-1, test-2, test-3"
-        })
-        void given_concurrentOperations_when_multipleThreadsAccess_then_shouldBeSafe(String token1, String token2, String token3) {
-            // Given & When - simulate concurrent access
-            jwtBlackListService.blacklistToken(token1, getFutureExpiration());
-            jwtBlackListService.blacklistToken(token2, getFutureExpiration());
-            jwtBlackListService.blacklistToken(token3, getFutureExpiration());
+            // When
+            jwtBlackListService.clearAll();
 
             // Then
-            assertThat(jwtBlackListService.getBlacklistedTokensCount()).isEqualTo(3);
-            assertThat(jwtBlackListService.isBlacklisted(token1)).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted(token2)).isTrue();
-            assertThat(jwtBlackListService.isBlacklisted(token3)).isTrue();
+            verify(redisTemplate).keys("jwt:blacklist:*");
+            verify(redisTemplate, never()).delete(any(Collection.class));
+        }
+
+        @Test
+        @DisplayName("Should handle null keys gracefully in count operation")
+        void given_nullKeysFromRedis_when_getBlacklistedTokensCount_then_shouldReturnZero() {
+            // Given
+            when(redisTemplate.keys("jwt:blacklist:*")).thenReturn(null);
+
+            // When
+            int count = jwtBlackListService.getBlacklistedTokensCount();
+
+            // Then
+            assertThat(count).isZero();
         }
     }
 }

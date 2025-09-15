@@ -6,21 +6,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@ConfigurationProperties(prefix = "jwt.blacklist")
+@ConfigurationProperties(prefix = "jwt.blacklist.redis")
 @Getter
 @Setter
 public class JwtBlackListProperties {
 
-    private long cleanupIntervalMillis = 3600000; // 1 hour in milliseconds
-    private boolean enableScheduledCleanup = true;
-    private boolean enableLazyCleanup = true;
+    private String keyPrefix = "jwt:blacklist";
+    private int ttlBufferSeconds = 300; // 5 minutes buffer before JWT expiration
 
     @Override
     public String toString() {
         return "JwtBlackListProperties{" +
-                "cleanupIntervalMillis=" + cleanupIntervalMillis +
-                ", enableScheduledCleanup=" + enableScheduledCleanup +
-                ", enableLazyCleanup=" + enableLazyCleanup +
+                "keyPrefix='" + keyPrefix + '\'' +
+                ", ttlBufferSeconds=" + ttlBufferSeconds +
                 '}';
     }
 }
