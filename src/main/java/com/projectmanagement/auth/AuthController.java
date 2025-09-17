@@ -2,6 +2,8 @@ package com.projectmanagement.auth;
 
 import com.projectmanagement.auth.dto.LoginRequest;
 import com.projectmanagement.auth.dto.LoginResponse;
+import com.projectmanagement.auth.dto.RefreshTokenRequest;
+import com.projectmanagement.auth.dto.RefreshTokenResponse;
 import com.projectmanagement.auth.dto.RegisterUserRequest;
 import com.projectmanagement.user.User;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,5 +47,11 @@ public class AuthController {
             authService.logout(token);
         }
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<RefreshTokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
+        RefreshTokenResponse refreshTokenResponse = authService.refreshToken(refreshTokenRequest);
+        return ResponseEntity.ok(refreshTokenResponse);
     }
 }

@@ -190,4 +190,61 @@ public class AuthControllerIntegrationTest {
         User createdUser = userRepository.findByEmail(newEmail).orElse(null);
         assertThat(createdUser).isNull();
     }
+
+    @ParameterizedTest
+    @DisplayName("Given valid user credentials, when logging in, then login should be successful")
+    @CsvSource({
+            "admin@prjctmng.com, prjctmng432!admin, ADMIN",
+            "manager@prjctmng.com, prjctmng432!manager, PROJECT_MANAGER",
+            "dev@prjctmng.com, prjctmng432!dev, DEVELOPER"
+    })
+    void givenValidUserCredentials_whenLoggingIn_thenLoginShouldBeSuccessful(
+            String email,
+            String password,
+            String expectedRole) {
+
+        // Given valid user credentials
+        LoginRequest loginRequest = new LoginRequest(email, password);
+
+        // When logging in
+        ResponseEntity<LoginResponse> response = restTemplate.postForEntity(
+                baseUrl + "/login",
+                loginRequest,
+                LoginResponse.class
+        );
+
+        // Then login should be successful
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+
+        LoginResponse loginResponse = response.getBody();
+
+        // And should return valid access token
+        assertThat(loginResponse.accessToken()).isNotNull();
+        assertThat(loginResponse.accessToken()).isNotEmpty();
+        assertThat(loginResponse.accessToken()).startsWith("eyJ");
+
+        // And should return valid refresh token
+        assertThat(loginResponse.refreshToken()).isNotNull();
+        assertThat(loginResponse.refreshToken()).isNotEmpty();
+        assertThat(loginResponse.refreshToken()).startsWith("eyJ");
+
+        // And should have correct authentication metadata
+        assertThat(loginResponse.tokenType()).isEqualTo("Bearer");
+        assertThat(loginResponse.expiresIn()).isEqualTo(1800);
+
+        // And should return complete user information
+        assertThat(loginResponse.user()).isNotNull();
+        assertThat(loginResponse.user().email()).isEqualTo(email);
+        assertThat(loginResponse.user().role()).isEqualTo(expectedRole);
+        assertThat(loginResponse.user().id()).isNotNull();
+        assertThat(loginResponse.user().username()).isNotNull();
+        assertThat(loginResponse.user().username()).isNotEmpty();
+
+        // And tokens should be unique
+        assertThat(loginResponse.accessToken()).isNotEqualTo(loginResponse.refreshToken());
+
+        // And access token should be shorter than refresh token (different expiration times)
+        assertThat(loginResponse.accessToken().length()).isLessThan(loginResponse.refreshToken().length());
+    }
 }

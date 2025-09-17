@@ -145,14 +145,40 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, WebRequest request) {
         log.warn("Access denied: {}", ex.getMessage());
-        
+
         ErrorResponse errorResponse = ErrorResponse.of(
             "Forbidden",
             "Access denied. You do not have permission to perform this action.",
             request.getDescription(false).replace("uri=", "")
         );
-        
+
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRefreshToken(InvalidRefreshTokenException ex, WebRequest request) {
+        log.warn("Invalid refresh token: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.of(
+            "Unauthorized",
+            ex.getMessage(),
+            request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+
+    @ExceptionHandler(ExpiredRefreshTokenException.class)
+    public ResponseEntity<ErrorResponse> handleExpiredRefreshToken(ExpiredRefreshTokenException ex, WebRequest request) {
+        log.warn("Expired refresh token: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.of(
+            "Unauthorized",
+            ex.getMessage(),
+            request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
     }
 
     @ExceptionHandler(Exception.class)
