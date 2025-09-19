@@ -5,6 +5,7 @@ import com.projectmanagement.exception.dto.ValidationErrorResponse;
 import com.projectmanagement.exception.dto.ValidationErrorResponse.FieldError;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 
 import java.util.List;
 
@@ -84,7 +87,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ValidationErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex, WebRequest request) {
         log.warn("Validation failed: {} errors", ex.getBindingResult().getFieldErrorCount());
-        
+
         List<FieldError> fieldErrors = ex.getBindingResult()
             .getFieldErrors()
             .stream()
@@ -94,13 +97,32 @@ public class GlobalExceptionHandler {
                 error.getDefaultMessage()
             ))
             .toList();
-        
+
         ValidationErrorResponse errorResponse = ValidationErrorResponse.of(
             "Request validation failed",
             request.getDescription(false).replace("uri=", ""),
             fieldErrors
         );
-        
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex, WebRequest request) {
+        log.warn("Constraint violation: {}", ex.getMessage());
+
+        String message = ex.getConstraintViolations()
+            .stream()
+            .map(ConstraintViolation::getMessage)
+            .findFirst()
+            .orElse("Validation error");
+
+        ErrorResponse errorResponse = ErrorResponse.of(
+            "Bad Request",
+            message,
+            request.getDescription(false).replace("uri=", "")
+        );
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 

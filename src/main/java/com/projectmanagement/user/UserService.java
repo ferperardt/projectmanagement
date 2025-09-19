@@ -1,12 +1,12 @@
 package com.projectmanagement.user;
 
+import com.projectmanagement.auth.CustomUserDetails;
 import com.projectmanagement.auth.dto.RegisterUserRequest;
 import com.projectmanagement.exception.UserAlreadyExistsException;
 import com.projectmanagement.user.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -45,16 +45,7 @@ public class UserService implements UserDetailsService {
         log.debug("Loading user details for authentication: {}", email);
 
         User user = findByEmail(email);
-
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getEmail())
-                .password(user.getPassword())
-                .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())))
-                .accountExpired(false)
-                .accountLocked(!user.getEnabled())
-                .credentialsExpired(false)
-                .disabled(!user.getEnabled())
-                .build();
+        return new CustomUserDetails(user);
     }
 
     public User findByEmail(String email) {

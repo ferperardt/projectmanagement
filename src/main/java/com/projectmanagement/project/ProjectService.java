@@ -1,5 +1,6 @@
 package com.projectmanagement.project;
 
+import com.projectmanagement.auth.CustomUserDetails;
 import com.projectmanagement.project.dto.CreateProjectRequest;
 import com.projectmanagement.project.dto.ProjectResponse;
 import com.projectmanagement.project.enums.ProjectMemberRole;
@@ -7,11 +8,14 @@ import com.projectmanagement.user.User;
 import com.projectmanagement.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +49,16 @@ public class ProjectService {
 
     public ProjectResponse getProjectResponse(Project project) {
         return projectMapper.toResponse(project);
+    }
+
+    public Page<ProjectResponse> getUserProjects(Authentication authentication, Pageable pageable) {
+        UUID userId = CustomUserDetails.getUserId(authentication);
+        log.debug("Getting projects for user ID: {}", userId);
+
+        Page<Project> projects = projectRepository.findProjectsByUserId(userId, pageable);
+
+        log.info("Found {} projects for user ID: {}", projects.getTotalElements(), userId);
+        return projects.map(projectMapper::toResponse);
     }
 
     private void createOwnerMembership(Project project, User owner) {
