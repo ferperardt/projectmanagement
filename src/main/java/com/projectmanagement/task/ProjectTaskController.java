@@ -1,8 +1,12 @@
 package com.projectmanagement.task;
 
 import com.projectmanagement.task.dto.CreateTaskRequest;
+import com.projectmanagement.task.dto.TaskResponse;
+import com.projectmanagement.validation.AllowSortFields;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -18,6 +22,16 @@ import java.util.UUID;
 public class ProjectTaskController {
 
     private final TaskService taskService;
+
+    @GetMapping
+    public ResponseEntity<Page<TaskResponse>> getProjectTasks(
+            @PathVariable UUID projectId,
+            Authentication authentication,
+            @AllowSortFields({"id", "title", "status", "priority", "createdAt", "updatedAt", "assignedUserId", "createdById"}) Pageable pageable) {
+
+        Page<TaskResponse> tasks = taskService.getProjectTasks(projectId, authentication, pageable);
+        return ResponseEntity.ok(tasks);
+    }
 
     @PostMapping
     public ResponseEntity<Void> createTask(

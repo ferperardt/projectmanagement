@@ -9,6 +9,8 @@ import com.projectmanagement.task.enums.TaskPriority;
 import com.projectmanagement.task.enums.TaskStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +54,16 @@ public class TaskService {
         log.info("Task created successfully with ID: {} for project: {}", savedTask.getId(), savedTask.getProjectId());
 
         return savedTask;
+    }
+
+    public Page<TaskResponse> getProjectTasks(UUID projectId, Authentication authentication, Pageable pageable) {
+        UUID currentUserId = CustomUserDetails.getUserId(authentication);
+        log.debug("Fetching tasks for project: {} by user: {}", projectId, authentication.getName());
+
+        validateUserIsProjectMember(currentUserId, projectId);
+
+        Page<Task> tasks = taskRepository.findByProjectId(projectId, pageable);
+        return tasks.map(taskMapper::toResponse);
     }
 
     public TaskResponse getTaskResponse(Task task) {
