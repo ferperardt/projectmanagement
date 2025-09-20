@@ -203,6 +203,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
     }
 
+    @ExceptionHandler(ProjectMembershipException.class)
+    public ResponseEntity<ErrorResponse> handleProjectMembershipException(ProjectMembershipException ex, WebRequest request) {
+        log.warn("Project membership requirement not met: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.of(
+            "Bad Request",
+            ex.getMessage(),
+            request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, WebRequest request) {
         log.error("Unexpected error occurred", ex);
