@@ -1,6 +1,7 @@
 package com.projectmanagement.project;
 
 import com.projectmanagement.project.dto.CreateProjectRequest;
+import com.projectmanagement.project.dto.ProjectDetailResponse;
 import com.projectmanagement.project.dto.ProjectResponse;
 import com.projectmanagement.validation.AllowSortFields;
 import jakarta.validation.Valid;
@@ -14,6 +15,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -30,6 +32,15 @@ public class ProjectController {
 
         Page<ProjectResponse> projects = projectService.getUserProjects(authentication, pageable);
         return ResponseEntity.ok(projects);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ProjectDetailResponse> getProjectDetails(
+            @PathVariable UUID id,
+            Authentication authentication) {
+
+        ProjectDetailResponse projectDetails = projectService.getProjectDetails(id, authentication);
+        return ResponseEntity.ok(projectDetails);
     }
 
     @PostMapping
