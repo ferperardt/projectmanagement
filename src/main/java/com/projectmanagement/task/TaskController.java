@@ -1,0 +1,30 @@
+package com.projectmanagement.task;
+
+import com.projectmanagement.task.dto.AssignTaskRequest;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/tasks")
+@RequiredArgsConstructor
+@Validated
+public class TaskController {
+
+    private final TaskService taskService;
+
+    @PatchMapping("/{id}/assign")
+    public ResponseEntity<Void> assignTask(
+            @PathVariable UUID id,
+            @Valid @RequestBody AssignTaskRequest request,
+            Authentication authentication) {
+
+        taskService.assignTask(id, request, authentication);
+        return ResponseEntity.noContent().build();
+    }
+}

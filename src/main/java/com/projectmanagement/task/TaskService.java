@@ -2,7 +2,9 @@ package com.projectmanagement.task;
 
 import com.projectmanagement.auth.CustomUserDetails;
 import com.projectmanagement.exception.ProjectMembershipException;
+import com.projectmanagement.exception.TaskNotFoundException;
 import com.projectmanagement.project.ProjectMemberRepository;
+import com.projectmanagement.task.dto.AssignTaskRequest;
 import com.projectmanagement.task.dto.CreateTaskRequest;
 import com.projectmanagement.task.dto.TaskResponse;
 import com.projectmanagement.task.enums.TaskPriority;
@@ -68,6 +70,26 @@ public class TaskService {
 
     public TaskResponse getTaskResponse(Task task) {
         return taskMapper.toResponse(task);
+    }
+
+    @Transactional
+    public void assignTask(UUID taskId, AssignTaskRequest request, Authentication authentication) {
+        UUID currentUserId = CustomUserDetails.getUserId(authentication);
+        log.debug("Assigning task {} to user {} by user: {}", taskId, request.assignedUserId(), authentication.getName());
+
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId));
+
+        validateUserIsProjectMember(currentUserId, task.getProjectId());
+
+        if (request.assignedUserId() != null) {
+            validateUserIsProjectMember(request.assignedUserId(), task.getProjectId());
+        }
+
+        task.setAssignedUserId(request.assignedUserId());
+        taskRepository.save(task);
+
+        log.info("Task {} assigned to user {} successfully", taskId, request.assignedUserId());
     }
 
     private void validateUserIsProjectMember(UUID userId, UUID projectId) {
