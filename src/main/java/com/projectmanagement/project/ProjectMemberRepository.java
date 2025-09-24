@@ -27,5 +27,8 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Pr
     @Query("SELECT u.id as userId, u.username as username, u.email as email, pm.role as role, pm.joinedAt as joinedAt FROM ProjectMember pm JOIN User u ON pm.userId = u.id WHERE pm.projectId = :projectId")
     List<ProjectMemberView> findProjectMembersWithUsers(@Param("projectId") UUID projectId);
 
+    @Query("SELECT u.id as userId, u.username as username, u.email as email, pm.role as role, pm.joinedAt as joinedAt FROM ProjectMember pm JOIN User u ON pm.userId = u.id WHERE pm.projectId = :projectId AND pm.userId = :userId")
+    Optional<ProjectMemberView> findProjectMemberWithUser(@Param("projectId") UUID projectId, @Param("userId") UUID userId);
+
     boolean existsByProjectIdAndUserIdAndRoleIn(UUID projectId, UUID userId, List<ProjectMemberRole> roles);
 }
