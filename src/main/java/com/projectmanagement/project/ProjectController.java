@@ -1,5 +1,6 @@
 package com.projectmanagement.project;
 
+import com.projectmanagement.project.dto.AddMemberRequest;
 import com.projectmanagement.project.dto.CreateProjectRequest;
 import com.projectmanagement.project.dto.ProjectDetailResponse;
 import com.projectmanagement.project.dto.ProjectResponse;
@@ -53,5 +54,17 @@ public class ProjectController {
         URI location = URI.create("/api/projects/" + createdProject.getId());
 
         return ResponseEntity.created(location).build();
+    }
+
+    @PatchMapping("/{id}/members")
+    public ResponseEntity<Void> addMemberToProject(
+            @PathVariable UUID id,
+            @Valid @RequestBody AddMemberRequest addMemberRequest,
+            Authentication authentication) {
+
+        projectService.addMemberToProject(id, addMemberRequest, authentication);
+        URI location = URI.create("/api/projects/" + id);
+
+        return ResponseEntity.noContent().location(location).build();
     }
 }

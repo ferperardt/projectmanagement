@@ -242,6 +242,32 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFoundException(UserNotFoundException ex, WebRequest request) {
+        log.warn("User not found: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.of(
+            "Not Found",
+            ex.getMessage(),
+            request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+    @ExceptionHandler(InsufficientProjectPermissionException.class)
+    public ResponseEntity<ErrorResponse> handleInsufficientProjectPermissionException(InsufficientProjectPermissionException ex, WebRequest request) {
+        log.warn("Insufficient project permission: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.of(
+            "Unprocessable Entity",
+            ex.getMessage(),
+            request.getDescription(false).replace("uri=", "")
+        );
+
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, WebRequest request) {
         log.error("Unexpected error occurred", ex);
