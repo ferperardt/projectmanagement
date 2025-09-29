@@ -8,6 +8,7 @@ import com.projectmanagement.task.dto.AssignTaskRequest;
 import com.projectmanagement.task.dto.CreateTaskRequest;
 import com.projectmanagement.task.dto.TaskDetailResponse;
 import com.projectmanagement.task.dto.TaskResponse;
+import com.projectmanagement.task.dto.UpdateTaskRequest;
 import com.projectmanagement.task.enums.TaskPriority;
 import com.projectmanagement.task.enums.TaskStatus;
 import lombok.RequiredArgsConstructor;
@@ -109,6 +110,31 @@ public class TaskService {
         return projectMemberRepository.findProjectMemberWithUser(task.getProjectId(), task.getAssignedUserId())
                 .map(memberView -> taskMapper.toTaskDetailResponse(task, memberView))
                 .orElseThrow(() -> new ProjectMembershipException("Assigned user " + task.getAssignedUserId() + " is not a member of the project"));
+    }
+
+    @Transactional
+    public void updateTask(UUID taskId, UpdateTaskRequest request, Authentication authentication) {
+        UUID currentUserId = CustomUserDetails.getUserId(authentication);
+        log.debug("Updating task {} by user: {}", taskId, authentication.getName());
+
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId));
+
+        validateUserIsProjectMember(currentUserId, task.getProjectId());
+
+        if (request.assignedUserId() != null) {
+            validateUserIsProjectMember(request.assignedUserId(), task.getProjectId());
+        }
+
+        task.setTitle(request.title());
+        task.setDescription(request.description());
+        task.setStatus(request.status());
+        task.setPriority(request.priority());
+        task.setAssignedUserId(request.assignedUserId());
+
+        taskRepository.save(task);
+
+        log.info("Task {} updated successfully by user: {}", taskId, authentication.getName());
     }
 
     private void validateUserIsProjectMember(UUID userId, UUID projectId) {
