@@ -4,6 +4,7 @@ import com.projectmanagement.project.dto.AddMemberRequest;
 import com.projectmanagement.project.dto.CreateProjectRequest;
 import com.projectmanagement.project.dto.ProjectDetailResponse;
 import com.projectmanagement.project.dto.ProjectResponse;
+import com.projectmanagement.project.dto.UpdateProjectRequest;
 import com.projectmanagement.validation.AllowSortFields;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,18 @@ public class ProjectController {
         projectService.addMemberToProject(id, addMemberRequest, authentication);
         URI location = URI.create("/api/projects/" + id);
 
+        return ResponseEntity.noContent().location(location).build();
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Void> updateProject(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateProjectRequest request,
+            Authentication authentication) {
+
+        projectService.updateProject(id, request, authentication);
+
+        URI location = URI.create("/api/projects/" + id);
         return ResponseEntity.noContent().location(location).build();
     }
 }

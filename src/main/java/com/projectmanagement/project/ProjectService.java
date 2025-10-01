@@ -157,6 +157,24 @@ public class ProjectService {
         }
     }
 
+    @Transactional
+    public void updateProject(UUID projectId, UpdateProjectRequest request, Authentication authentication) {
+        UUID currentUserId = CustomUserDetails.getUserId(authentication);
+        log.debug("Updating project {} by user: {}", projectId, authentication.getName());
+
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ProjectNotFoundException(projectId));
+
+        validateUserIsProjectMember(currentUserId, projectId);
+
+        project.setName(request.name());
+        project.setDescription(request.description());
+
+        projectRepository.save(project);
+
+        log.info("Project {} updated successfully by user: {}", projectId, authentication.getName());
+    }
+
     private void createOwnerMembership(Project project, User owner) {
         ProjectMember projectMember = new ProjectMember();
         projectMember.setProjectId(project.getId());
