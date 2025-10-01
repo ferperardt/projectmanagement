@@ -80,4 +80,14 @@ public class ProjectController {
         URI location = URI.create("/api/projects/" + id);
         return ResponseEntity.noContent().location(location).build();
     }
+
+    @DeleteMapping("/{id}/members/{userId}")
+    public ResponseEntity<Void> removeMemberFromProject(
+            @PathVariable UUID id,
+            @PathVariable UUID userId,
+            Authentication authentication) {
+
+        projectService.removeMemberFromProject(id, userId, authentication);
+        return ResponseEntity.noContent().build();
+    }
 }

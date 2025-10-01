@@ -147,7 +147,7 @@ public class ProjectService {
         boolean hasPermission = projectMemberRepository.existsByProjectIdAndUserIdAndRoleIn(projectId, userId, allowedRoles);
 
         if (!hasPermission) {
-            throw new InsufficientProjectPermissionException();
+            throw new InsufficientProjectPermissionException("Only project owners and managers can add members to the project");
         }
     }
 
@@ -173,6 +173,35 @@ public class ProjectService {
         projectRepository.save(project);
 
         log.info("Project {} updated successfully by user: {}", projectId, authentication.getName());
+    }
+
+    @Transactional
+    public void removeMemberFromProject(UUID projectId, UUID targetUserId, Authentication authentication) {
+        UUID currentUserId = CustomUserDetails.getUserId(authentication);
+        log.debug("Removing member {} from project {} by user: {}", targetUserId, projectId, authentication.getName());
+
+        validateProjectExists(projectId);
+        validateUserIsProjectMember(currentUserId, projectId);
+        validateUserIsProjectMember(targetUserId, projectId);
+        validateUserHasPermissionToRemoveMembers(currentUserId, projectId);
+
+        ProjectMember memberToRemove = projectMemberRepository.findByProjectIdAndUserId(projectId, targetUserId)
+                .orElseThrow(() -> new ProjectMembershipException(targetUserId.toString()));
+
+        projectMemberRepository.delete(memberToRemove);
+
+        log.info("Successfully removed member {} from project {} by user: {}",
+                targetUserId, projectId, authentication.getName());
+    }
+
+
+    private void validateUserHasPermissionToRemoveMembers(UUID userId, UUID projectId) {
+        List<ProjectMemberRole> allowedRoles = List.of(ProjectMemberRole.OWNER, ProjectMemberRole.MANAGER);
+        boolean hasPermission = projectMemberRepository.existsByProjectIdAndUserIdAndRoleIn(projectId, userId, allowedRoles);
+
+        if (!hasPermission) {
+            throw new InsufficientProjectPermissionException("Only project owners and managers can remove members from the project");
+        }
     }
 
     private void createOwnerMembership(Project project, User owner) {
