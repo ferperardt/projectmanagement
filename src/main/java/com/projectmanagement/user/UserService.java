@@ -14,8 +14,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -49,6 +47,7 @@ public class UserService implements UserDetailsService {
     }
 
     public User findByEmail(String email) {
+        log.debug("Querying database for user with email: {}", email);
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
     }
@@ -57,7 +56,7 @@ public class UserService implements UserDetailsService {
         String email = authentication.getName();
 
         log.debug("Getting current user with email: {}", email);
-        
+
         return userMapper.toResponse(findByEmail(email));
     }
 
